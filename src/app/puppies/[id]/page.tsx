@@ -10,7 +10,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { id } = await params;
-    const puppy = getPuppyById(id);
+    const puppy = await getPuppyById(id);
     if (!puppy) return { title: "Puppy Not Found" };
     return {
         title: `${puppy.breed} Puppy for Sale in ${puppy.city}`,
@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PuppyDetailPage({ params }: Props) {
     const { id } = await params;
-    const puppy = getPuppyById(id);
+    const puppy = await getPuppyById(id);
     if (!puppy) notFound();
 
     const waMessage = encodeURIComponent(

@@ -2,16 +2,17 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import StickyWhatsApp from "@/components/StickyWhatsApp";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://pawtrust.in"),
   title: {
-    default: "PawTrust — Find Verified Puppies for Sale in India",
+    default: "PawTrust — Find Healthy Puppies From Trusted Breeders Near You",
     template: "%s | PawTrust",
   },
   description:
-    "PawTrust connects puppy buyers with verified breeders and pet owners across India. Browse Labrador, Golden Retriever, Beagle puppies and more.",
-  keywords: ["puppies for sale", "buy puppy India", "verified breeders", "PawTrust"],
+    "PawTrust connects puppy buyers with verified breeders across India. Browse Labrador, Golden Retriever, Husky, German Shepherd and more. Safe buying, vaccinated puppies.",
+  keywords: ["puppies for sale India", "buy puppy", "verified breeders", "PawTrust", "labrador puppy"],
   openGraph: {
     siteName: "PawTrust.in",
     type: "website",
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Navbar />
         <main className="pt-16 min-h-screen">{children}</main>
         <Footer />
+        <StickyWhatsApp />
       </body>
     </html>
   );

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Logo from "./Logo";
 
 export default function Footer() {
     return (
@@ -7,9 +8,8 @@ export default function Footer() {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
                     {/* Brand */}
                     <div className="md:col-span-1">
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="w-7 h-7 bg-teal-500 rounded-lg flex items-center justify-center text-sm">🐾</div>
-                            <span className="text-base font-bold text-white">PawTrust</span>
+                        <div className="mb-4">
+                            <Logo size="sm" />
                         </div>
                         <p className="text-sm text-gray-400 leading-relaxed">
                             Connecting loving homes with healthy &amp; verified puppies across India.

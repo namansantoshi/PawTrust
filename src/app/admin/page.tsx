@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type { Puppy } from "@/lib/data";
 import { BREEDS, CITIES } from "@/lib/data";
 
@@ -10,67 +11,69 @@ const EMPTY_FORM = {
     price: "",
     city: "",
     description: "",
-    images: "",
+    images: "",       // comma-separated URLs
     vaccinated: false,
     verified: false,
     sold: false,
-    sellerContact: "",
+    published: false,
+    sellerContact: "918273848985",
 };
 
+type FormState = typeof EMPTY_FORM;
+
 export default function AdminPage() {
-    const [puppies, setPuppies] = useState<Puppy[]>([]);
-    const [form, setForm] = useState(EMPTY_FORM);
+    const router = useRouter();
+    const [listings, setListings] = useState<Puppy[]>([]);
+    const [form, setForm] = useState<FormState>(EMPTY_FORM);
     const [editId, setEditId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [msg, setMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-    const fetchPuppies = async () => {
+    const fetchListings = useCallback(async () => {
         const res = await fetch("/api/puppies");
-        const data = await res.json();
-        setPuppies(data);
-    };
+        if (res.ok) setListings(await res.json());
+    }, []);
 
-    useEffect(() => { fetchPuppies(); }, []);
+    useEffect(() => { fetchListings(); }, [fetchListings]);
 
-    const flash = (text: string, type: "success" | "error") => {
-        setMsg({ text, type });
-        setTimeout(() => setMsg(null), 3000);
-    };
+    function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
+        setForm((f) => ({ ...f, [key]: value }));
+    }
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const target = e.target as HTMLInputElement;
-        setForm((prev) => ({
-            ...prev,
-            [target.name]: target.type === "checkbox" ? target.checked : target.value,
-        }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        setLoading(true);
+        setSaving(true);
+        setMsg(null);
+
         const payload = {
             ...form,
             price: Number(form.price),
-            images: form.images.split(",").map((s) => s.trim()).filter(Boolean),
+            images: form.images
+                .split(/[\n,]+/)
+                .map((s) => s.trim())
+                .filter(Boolean),
         };
-        try {
-            if (editId) {
-                await fetch("/api/puppies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editId, ...payload }) });
-                flash("Puppy updated!", "success");
-            } else {
-                await fetch("/api/puppies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-                flash("Puppy added!", "success");
-            }
+
+        const method = editId ? "PUT" : "POST";
+        const url = editId ? `/api/puppies?id=${editId}` : "/api/puppies";
+        const res = await fetch(url, {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+
+        if (res.ok) {
+            setMsg({ type: "ok", text: editId ? "Listing updated!" : "Listing published!" });
             setForm(EMPTY_FORM);
             setEditId(null);
-            fetchPuppies();
-        } catch {
-            flash("Something went wrong.", "error");
+            fetchListings();
+        } else {
+            setMsg({ type: "err", text: "Something went wrong. Please try again." });
         }
-        setLoading(false);
-    };
+        setSaving(false);
+    }
 
-    const startEdit = (p: Puppy) => {
+    function startEdit(p: Puppy) {
         setEditId(p.id);
         setForm({
             breed: p.breed,
@@ -79,96 +82,177 @@ export default function AdminPage() {
             price: String(p.price),
             city: p.city,
             description: p.description,
-            images: p.images.join(", "),
+            images: p.images.join("\n"),
             vaccinated: p.vaccinated,
             verified: p.verified,
             sold: p.sold,
+            published: p.published,
             sellerContact: p.sellerContact,
         });
         window.scrollTo({ top: 0, behavior: "smooth" });
-    };
+    }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Delete this puppy listing?")) return;
-        await fetch("/api/puppies", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-        flash("Deleted.", "success");
-        fetchPuppies();
-    };
+    async function deleteListing(id: string) {
+        if (!confirm("Delete this listing?")) return;
+        await fetch(`/api/puppies?id=${id}`, { method: "DELETE" });
+        fetchListings();
+    }
 
-    const handleMarkSold = async (p: Puppy) => {
-        await fetch("/api/puppies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: p.id, sold: !p.sold }) });
-        fetchPuppies();
-    };
+    async function toggleField(id: string, field: "sold" | "published") {
+        const puppy = listings.find((p) => p.id === id);
+        if (!puppy) return;
+        await fetch(`/api/puppies?id=${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ [field]: !puppy[field] }),
+        });
+        fetchListings();
+    }
+
+    async function handleLogout() {
+        await fetch("/api/auth", { method: "DELETE" });
+        router.push("/admin/login");
+    }
+
+    const inp = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:border-transparent";
+    const lbl = "block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1";
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-            <div className="flex items-center gap-3 mb-8">
-                <span className="text-3xl">🛠️</span>
+        <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
+            {/* Header */}
+            <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-extrabold text-brown-800">Admin Dashboard</h1>
-                    <p className="text-sm text-brown-400">Manage PawTrust puppy listings</p>
+                    <h1 className="text-2xl font-bold text-gray-900">PawTrust Admin</h1>
+                    <p className="text-sm text-gray-400 mt-0.5">{listings.length} listing{listings.length !== 1 ? "s" : ""} total</p>
                 </div>
+                <button onClick={handleLogout} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+                    Log out
+                </button>
             </div>
 
-            {/* Flash message */}
-            {msg && (
-                <div className={`mb-6 px-4 py-3 rounded-xl text-sm font-medium ${msg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
-                    {msg.text}
-                </div>
-            )}
-
             {/* Form */}
-            <div className="bg-white rounded-3xl border border-cream-200 shadow-sm p-8 mb-10">
-                <h2 className="text-lg font-bold text-brown-800 mb-6">{editId ? "✏️ Edit Listing" : "➕ Add New Puppy"}</h2>
-                <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <AdminField label="Breed">
-                        <select name="breed" value={form.breed} onChange={handleChange} required className={inputCls}>
-                            <option value="">Select Breed</option>
-                            {BREEDS.map((b) => <option key={b} value={b}>{b}</option>)}
-                        </select>
-                    </AdminField>
-                    <AdminField label="Age (e.g. 3 months)">
-                        <input type="text" name="age" value={form.age} onChange={handleChange} required placeholder="3 months" className={inputCls} />
-                    </AdminField>
-                    <AdminField label="Gender">
-                        <select name="gender" value={form.gender} onChange={handleChange} className={inputCls}>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                        </select>
-                    </AdminField>
-                    <AdminField label="Price (₹)">
-                        <input type="number" name="price" value={form.price} onChange={handleChange} required placeholder="18000" className={inputCls} />
-                    </AdminField>
-                    <AdminField label="City">
-                        <select name="city" value={form.city} onChange={handleChange} required className={inputCls}>
-                            <option value="">Select City</option>
-                            {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </AdminField>
-                    <AdminField label="Seller Contact (WhatsApp number with country code)">
-                        <input type="text" name="sellerContact" value={form.sellerContact} onChange={handleChange} placeholder="919876543210" className={inputCls} />
-                    </AdminField>
-                    <AdminField label="Image URLs (comma-separated)" className="sm:col-span-2">
-                        <input type="text" name="images" value={form.images} onChange={handleChange} placeholder="https://... , https://..." className={inputCls} />
-                    </AdminField>
-                    <AdminField label="Description" className="sm:col-span-2">
-                        <textarea name="description" value={form.description} onChange={handleChange} rows={3} placeholder="Describe the puppy…" className={`${inputCls} resize-none`} />
-                    </AdminField>
-                    {/* Toggles */}
-                    <div className="sm:col-span-2 flex flex-wrap gap-6">
-                        {(["vaccinated", "verified", "sold"] as const).map((field) => (
-                            <label key={field} className="flex items-center gap-2 cursor-pointer select-none">
-                                <input type="checkbox" name={field} checked={form[field] as boolean} onChange={handleChange} className="w-4 h-4 rounded accent-brand-500" />
-                                <span className="text-sm font-medium text-brown-700 capitalize">{field}</span>
-                            </label>
-                        ))}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+                <h2 className="font-bold text-gray-900 mb-5 text-base">
+                    {editId ? "✏️ Edit Listing" : "➕ Add New Listing"}
+                </h2>
+
+                {msg && (
+                    <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium ${msg.type === "ok" ? "bg-teal-50 text-teal-700 border border-teal-100" : "bg-red-50 text-red-700 border border-red-100"}`}>
+                        {msg.text}
                     </div>
-                    <div className="sm:col-span-2 flex gap-3">
-                        <button type="submit" disabled={loading} className="px-6 py-3 rounded-full btn-shine text-white font-bold disabled:opacity-60">
-                            {loading ? "Saving…" : editId ? "Update Listing" : "Add Listing"}
+                )}
+
+                <form onSubmit={handleSubmit}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Breed */}
+                        <div>
+                            <label className={lbl}>Breed</label>
+                            <select value={form.breed} onChange={(e) => setField("breed", e.target.value)} required className={inp}>
+                                <option value="">Select breed</option>
+                                {BREEDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Age */}
+                        <div>
+                            <label className={lbl}>Age</label>
+                            <input type="text" placeholder="e.g. 3 months" value={form.age} onChange={(e) => setField("age", e.target.value)} required className={inp} />
+                        </div>
+
+                        {/* Price */}
+                        <div>
+                            <label className={lbl}>Price (₹)</label>
+                            <input type="number" placeholder="e.g. 18000" value={form.price} onChange={(e) => setField("price", e.target.value)} required min={0} className={inp} />
+                        </div>
+
+                        {/* Gender */}
+                        <div>
+                            <label className={lbl}>Gender</label>
+                            <select value={form.gender} onChange={(e) => setField("gender", e.target.value as "Male" | "Female")} className={inp}>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                            </select>
+                        </div>
+
+                        {/* City */}
+                        <div>
+                            <label className={lbl}>City / Location</label>
+                            <select value={form.city} onChange={(e) => setField("city", e.target.value)} required className={inp}>
+                                <option value="">Select city</option>
+                                {CITIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Seller contact */}
+                        <div>
+                            <label className={lbl}>Seller WhatsApp Number</label>
+                            <input type="text" placeholder="918273848985" value={form.sellerContact} onChange={(e) => setField("sellerContact", e.target.value)} className={inp} />
+                        </div>
+
+                        {/* Description */}
+                        <div className="md:col-span-2">
+                            <label className={lbl}>Description</label>
+                            <textarea
+                                rows={3}
+                                placeholder="Describe the puppy — temperament, health, parents, etc."
+                                value={form.description}
+                                onChange={(e) => setField("description", e.target.value)}
+                                className={inp + " resize-none"}
+                            />
+                        </div>
+
+                        {/* Image URLs */}
+                        <div className="md:col-span-2">
+                            <label className={lbl}>Image URLs <span className="text-gray-400 normal-case font-normal">(one per line or comma-separated)</span></label>
+                            <textarea
+                                rows={3}
+                                placeholder={"https://example.com/puppy1.jpg\nhttps://example.com/puppy2.jpg"}
+                                value={form.images}
+                                onChange={(e) => setField("images", e.target.value)}
+                                className={inp + " resize-none font-mono text-xs"}
+                            />
+                            <p className="text-xs text-gray-400 mt-1">
+                                💡 Upload images to <a href="https://imgbb.com" target="_blank" className="text-teal-600 underline">imgbb.com</a> or <a href="https://cloudinary.com" target="_blank" className="text-teal-600 underline">Cloudinary</a> (free) and paste the direct links here.
+                            </p>
+                        </div>
+
+                        {/* Toggles */}
+                        <div className="md:col-span-2 flex flex-wrap gap-6 pt-2">
+                            {(
+                                [
+                                    ["vaccinated", "✅ Vaccinated"],
+                                    ["verified", "🛡️ Verified Breeder"],
+                                    ["sold", "🔴 Mark as Sold"],
+                                    ["published", "🌐 Publish (visible to buyers)"],
+                                ] as const
+                            ).map(([key, label]) => (
+                                <label key={key} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form[key]}
+                                        onChange={(e) => setField(key, e.target.checked)}
+                                        className="w-4 h-4 accent-teal-600 rounded"
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">{label}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="mt-5 flex gap-3">
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="px-6 py-2.5 rounded-lg bg-teal-600 text-white font-semibold text-sm hover:bg-teal-700 transition-colors disabled:opacity-60"
+                        >
+                            {saving ? "Saving…" : editId ? "Update Listing" : "Add Listing"}
                         </button>
                         {editId && (
-                            <button type="button" onClick={() => { setEditId(null); setForm(EMPTY_FORM); }} className="px-6 py-3 rounded-full border-2 border-brand-400 text-brand-600 font-bold hover:bg-brand-50 transition">
+                            <button
+                                type="button"
+                                onClick={() => { setEditId(null); setForm(EMPTY_FORM); setMsg(null); }}
+                                className="px-6 py-2.5 rounded-lg border border-gray-200 text-gray-600 font-semibold text-sm hover:bg-gray-50"
+                            >
                                 Cancel
                             </button>
                         )}
@@ -176,62 +260,67 @@ export default function AdminPage() {
                 </form>
             </div>
 
-            {/* Listings table */}
-            <h2 className="text-lg font-bold text-brown-800 mb-4">All Listings ({puppies.length})</h2>
-            <div className="overflow-x-auto rounded-2xl border border-cream-200 bg-white shadow-sm">
-                <table className="w-full text-sm">
-                    <thead className="bg-cream-100 text-brown-500 text-xs font-bold uppercase tracking-wider">
-                        <tr>
-                            {["Breed", "Age", "Gender", "Price", "City", "Status", "Actions"].map((h) => (
-                                <th key={h} className="px-4 py-3 text-left">{h}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-cream-100">
-                        {puppies.map((p) => (
-                            <tr key={p.id} className="hover:bg-cream-50 transition">
-                                <td className="px-4 py-3 font-semibold text-brown-800">
-                                    {p.verified && <span className="text-brand-500 mr-1" title="Verified">✅</span>}
-                                    {p.breed}
-                                </td>
-                                <td className="px-4 py-3 text-brown-400">{p.age}</td>
-                                <td className="px-4 py-3 text-brown-400">{p.gender}</td>
-                                <td className="px-4 py-3 font-bold text-brown-800">₹{p.price.toLocaleString("en-IN")}</td>
-                                <td className="px-4 py-3 text-brown-400">{p.city}</td>
-                                <td className="px-4 py-3">
-                                    {p.sold ? (
-                                        <span className="px-2 py-0.5 rounded-full bg-brown-200 text-brown-700 text-xs font-bold">Sold</span>
-                                    ) : (
-                                        <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-bold">Active</span>
-                                    )}
-                                    {p.vaccinated && <span className="ml-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs font-bold">Vacc</span>}
-                                </td>
-                                <td className="px-4 py-3 flex items-center gap-2">
-                                    <button onClick={() => startEdit(p)} className="px-3 py-1 rounded-full bg-brand-100 text-brand-700 text-xs font-semibold hover:bg-brand-200 transition">Edit</button>
-                                    <button onClick={() => handleMarkSold(p)} className={`px-3 py-1 rounded-full text-xs font-semibold transition ${p.sold ? "bg-green-100 text-green-700 hover:bg-green-200" : "bg-brown-100 text-brown-700 hover:bg-brown-200"}`}>
-                                        {p.sold ? "Unmark Sold" : "Mark Sold"}
-                                    </button>
-                                    <button onClick={() => handleDelete(p.id)} className="px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition">Delete</button>
-                                </td>
-                            </tr>
-                        ))}
-                        {puppies.length === 0 && (
-                            <tr><td colSpan={7} className="px-4 py-10 text-center text-brown-300">No listings yet. Add one above!</td></tr>
-                        )}
-                    </tbody>
-                </table>
+            {/* Listings Table */}
+            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100">
+                    <h2 className="font-bold text-gray-900 text-base">All Listings</h2>
+                </div>
+
+                {listings.length === 0 ? (
+                    <div className="py-16 text-center text-gray-400">
+                        <p className="text-3xl mb-3">🐾</p>
+                        <p className="font-semibold">No listings yet.</p>
+                        <p className="text-sm mt-1">Add your first puppy listing above.</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    {["Breed", "City", "Price", "Age", "Status", "Published", "Actions"].map((h) => (
+                                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {listings.map((p) => (
+                                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3">
+                                            <div className="font-semibold text-gray-900">{p.breed}</div>
+                                            <div className="text-xs text-gray-400">{p.gender} · {p.age}</div>
+                                        </td>
+                                        <td className="px-4 py-3 text-gray-600">{p.city}</td>
+                                        <td className="px-4 py-3 font-semibold text-teal-700">₹{p.price.toLocaleString("en-IN")}</td>
+                                        <td className="px-4 py-3 text-gray-600">{p.age}</td>
+                                        <td className="px-4 py-3">
+                                            <button
+                                                onClick={() => toggleField(p.id, "sold")}
+                                                className={`text-xs px-2.5 py-1 rounded-full font-medium ${p.sold ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}
+                                            >
+                                                {p.sold ? "Sold" : "Available"}
+                                            </button>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <button
+                                                onClick={() => toggleField(p.id, "published")}
+                                                className={`text-xs px-2.5 py-1 rounded-full font-medium ${p.published ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500"}`}
+                                            >
+                                                {p.published ? "Live" : "Draft"}
+                                            </button>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => startEdit(p)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                                                <button onClick={() => deleteListing(p.id)} className="text-xs text-red-500 hover:underline">Delete</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
-        </div>
-    );
-}
-
-const inputCls = "w-full rounded-xl border border-cream-300 px-3 py-2 text-sm text-brown-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-400";
-
-function AdminField({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
-    return (
-        <div className={className}>
-            <label className="block text-xs font-bold text-brown-600 uppercase tracking-wider mb-1.5">{label}</label>
-            {children}
         </div>
     );
 }
