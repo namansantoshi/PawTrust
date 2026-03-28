@@ -10,9 +10,9 @@ interface LogoProps {
 
 export default function Logo({ className = "", size = "md" }: LogoProps) {
   const sizeMap = {
-    sm: { width: 100, height: 35 },
-    md: { width: 140, height: 48 },
-    lg: { width: 220, height: 75 },
+    sm: { width: 120, height: 40 },
+    md: { width: 160, height: 55 },
+    lg: { width: 240, height: 85 },
   };
 
   const { width, height } = sizeMap[size];
