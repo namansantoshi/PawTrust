@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 
 interface LogoProps {
   className?: string;
@@ -8,31 +9,23 @@ interface LogoProps {
 }
 
 export default function Logo({ className = "", size = "md" }: LogoProps) {
-  const sizeClasses = {
-    sm: "text-xl",
-    md: "text-2xl",
-    lg: "text-4xl",
+  const sizeMap = {
+    sm: { width: 40, height: 40 },
+    md: { width: 50, height: 50 },
+    lg: { width: 80, height: 80 },
   };
 
-  const strokeWidth = size === "lg" ? "2px" : "1.2px";
-  const shadowOffset = size === "lg" ? "3.5px" : "2.5px";
+  const { width, height } = sizeMap[size];
 
   return (
     <Link href="/" className={`flex items-center group ${className}`}>
-      <span
-        className={`${sizeClasses[size]} font-black tracking-tight`}
-        style={{
-          color: "#FF007A", // Vibrant Magenta/Pink from the image
-          WebkitTextStroke: `${strokeWidth} black`,
-          textShadow: `${shadowOffset} ${shadowOffset} 0px black`,
-          fontFamily: '"Source Serif 4", "Merriweather", "Georgia", serif',
-          fontStyle: "normal",
-          display: "inline-block",
-          transform: "skewX(-2deg)", // Slight slant matching the hand-drawn feel
-        }}
-      >
-        PawTrust.in
-      </span>
+        <Image 
+          src="/logo.png" 
+          alt="PawTrust Logo" 
+          width={width} 
+          height={height}
+          className="object-contain"
+        />
     </Link>
   );
 }
